@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website im Iframe anzeigen</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .input-container {
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            gap: 10px;
+        }
+        input[type="url"] {
+            flex-proportions: 1;
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        iframe {
+            width: 100%;
+            max-width: 1000px;
+            height: 600px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Iframe Website-Tester</h1>
+    
+    <div class="input-container">
+        <input type="url" id="urlInput" placeholder="https://example.com" value="https://">
+        <button onclick="loadWebsite()">Anzeigen</button>
+    </div>
+
+    <iframe id="siteIframe" src="about:blank"></div>
+
+    <script>
+        function loadWebsite() {
+            let url = document.getElementById('urlInput').value.trim();
+            
+            // Automatisches Hinzufügen von https:// falls vergessen
+            if (!/^https?:\/\//i.test(url)) {
+                url = 'https://' + url;
+                document.getElementById('urlInput').value = url;
+            }
+            
+            document.getElementById('siteIframe').src = url;
+        }
+    </script>
+
+</body>
+</html>
