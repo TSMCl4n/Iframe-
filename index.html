@@ -1,77 +1,250 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Website im Iframe anzeigen</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .input-container {
-            margin-bottom: 20px;
-            width: 100%;
-            max-width: 600px;
-            display: flex;
-            gap: 10px;
-        }
-        input[type="url"] {
-            flex-proportions: 1;
-            flex: 1;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #007BFF;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        iframe {
-            width: 100%;
-            max-width: 1000px;
-            height: 600px;
-            border: 2px solid #ccc;
-            border-radius: 8px;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Iframe Einbetter mit Sicherheitscheck</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0f1117;
+    color: #e6e6e6;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  header {
+    padding: 14px 20px;
+    background: #171a23;
+    border-bottom: 1px solid #262a36;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  header h1 {
+    font-size: 15px;
+    margin: 0 12px 0 0;
+    color: #8a8fa3;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #2c303c;
+    background: #10121a;
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: #5b8cff; }
+  button {
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    background: #5b8cff;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:hover { background: #4a76e0; }
+  button:disabled { background: #33384a; cursor: wait; }
+
+  main {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: none;
+    background: #fff;
+  }
+  #status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+    padding: 40px;
+  }
+  #status.hidden { display: none; }
+  .spinner {
+    width: 34px; height: 34px;
+    border: 3px solid #2c303c;
+    border-top-color: #5b8cff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .warn-box {
+    max-width: 480px;
+    background: #1c1420;
+    border: 1px solid #4a2436;
+    border-radius: 12px;
+    padding: 24px 28px;
+  }
+  .warn-box .icon { font-size: 34px; margin-bottom: 6px; }
+  .warn-box h2 {
+    margin: 0 0 8px;
+    font-size: 18px;
+    color: #ff6b8a;
+  }
+  .warn-box p {
+    margin: 0 0 10px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #c4c4cf;
+  }
+  .warn-box code {
+    background: #12070c;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    color: #ff9fb3;
+  }
+  .warn-box a {
+    color: #5b8cff;
+    font-size: 13px;
+  }
+  #hint { color: #6c7086; font-size: 13px; margin-top: -6px; }
+</style>
 </head>
 <body>
 
-    <h1>Iframe Website-Tester</h1>
-    
-    <div class="input-container">
-        <input type="url" id="urlInput" placeholder="https://example.com" value="https://">
-        <button onclick="loadWebsite()">Anzeigen</button>
+<header>
+  <h1>🔗 Seite einbetten</h1>
+  <input type="text" id="urlInput" placeholder="https://beispiel.de" />
+  <button id="loadBtn">Laden</button>
+</header>
+
+<main>
+  <div id="status" class="hidden">
+    <div class="spinner"></div>
+    <div id="hint">Prüfe, ob die Seite eingebettet werden darf …</div>
+  </div>
+  <iframe id="frame"></iframe>
+</main>
+
+<script>
+const urlInput = document.getElementById('urlInput');
+const loadBtn = document.getElementById('loadBtn');
+const status = document.getElementById('status');
+const hint = document.getElementById('hint');
+const frame = document.getElementById('frame');
+
+// Öffentlicher CORS-Proxy, der uns die Response-Header der Zielseite verrät.
+// (Kein eigener Server nötig – aber Ratenlimits/Ausfälle des Proxys sind möglich,
+// deshalb gibt es unten einen Timeout-Fallback.)
+const HEADER_PROXY = 'https://api.allorigins.win/get?url=';
+
+function normalizeUrl(raw) {
+  let u = raw.trim();
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  return u;
+}
+
+function showStatus(text) {
+  status.classList.remove('hidden');
+  frame.style.display = 'none';
+  hint.textContent = text;
+}
+
+function showWarning(title, message, targetUrl) {
+  status.classList.remove('hidden');
+  frame.style.display = 'none';
+  status.innerHTML = `
+    <div class="warn-box">
+      <div class="icon">🚫</div>
+      <h2>${title}</h2>
+      <p>${message}</p>
+      <a href="${targetUrl}" target="_blank" rel="noopener">Stattdessen in neuem Tab öffnen ↗</a>
     </div>
+  `;
+}
 
-    <iframe id="siteIframe" src="about:blank"></div>
+function showFrame() {
+  status.classList.add('hidden');
+  frame.style.display = 'block';
+}
 
-    <script>
-        function loadWebsite() {
-            let url = document.getElementById('urlInput').value.trim();
-            
-            // Automatisches Hinzufügen von https:// falls vergessen
-            if (!/^https?:\/\//i.test(url)) {
-                url = 'https://' + url;
-                document.getElementById('urlInput').value = url;
-            }
-            
-            document.getElementById('siteIframe').src = url;
-        }
-    </script>
+async function loadSite() {
+  const raw = urlInput.value;
+  if (!raw) return;
+  const targetUrl = normalizeUrl(raw);
+
+  loadBtn.disabled = true;
+  showStatus('Prüfe Header der Zielseite …');
+
+  let blocked = false;
+  let blockReason = '';
+
+  try {
+    const res = await fetch(HEADER_PROXY + encodeURIComponent(targetUrl));
+    const data = await res.json();
+    const headers = (data.status && data.status.response_headers) || {};
+
+    // Header-Namen können unterschiedliche Groß-/Kleinschreibung haben
+    const lower = {};
+    Object.keys(headers).forEach(k => lower[k.toLowerCase()] = headers[k]);
+
+    const xfo = lower['x-frame-options'];
+    const csp = lower['content-security-policy'];
+
+    if (xfo && /deny|sameorigin/i.test(xfo)) {
+      blocked = true;
+      blockReason = `Die Seite sendet den Header <code>X-Frame-Options: ${xfo}</code>, der das Einbetten in fremde Seiten verbietet.`;
+    } else if (csp && /frame-ancestors\s+('none'|'self')/i.test(csp)) {
+      blocked = true;
+      blockReason = `Die Seite hat eine <code>Content-Security-Policy</code> mit <code>frame-ancestors</code>, die das Einbetten verbietet.`;
+    }
+  } catch (err) {
+    // Proxy-Check fehlgeschlagen -> weiter mit Timeout-Fallback unten
+    console.warn('Header-Check fehlgeschlagen, nutze Fallback:', err);
+  }
+
+  if (blocked) {
+    showWarning('Einbetten nicht erlaubt', blockReason, targetUrl);
+    loadBtn.disabled = false;
+    return;
+  }
+
+  // Header-Check war unauffällig (oder nicht möglich) -> iframe versuchen,
+  // mit Timeout als zusätzliche Absicherung falls die Seite doch leer bleibt
+  showStatus('Lade Seite …');
+  frame.src = targetUrl;
+
+  let loaded = false;
+  const timeout = setTimeout(() => {
+    if (!loaded) {
+      showWarning(
+        'Seite reagiert nicht',
+        'Die Seite konnte nicht innerhalb von 6 Sekunden geladen werden. Möglicherweise blockiert sie das Einbetten auf eine Art, die sich nicht per Header erkennen lässt (z. B. per JavaScript "Frame-Busting").',
+        targetUrl
+      );
+    }
+  }, 6000);
+
+  frame.onload = () => {
+    loaded = true;
+    clearTimeout(timeout);
+    showFrame();
+    loadBtn.disabled = false;
+  };
+}
+
+loadBtn.addEventListener('click', loadSite);
+urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadSite(); });
+</script>
 
 </body>
 </html>
